@@ -1,0 +1,54 @@
+version: '2'
+services:
+  composer:
+    image: prooph/composer:7.1
+    volumes:
+    - .:/app
+    environment:
+    - COMPOSER_ALLOW_SUPERUSER=1
+    command: install
+
+  php:
+    image: prooph/php:7.1-cli-xdebug
+    environment:
+    - PHP_IDE_CONFIG=serverName=application
+    - XDEBUG_CONFIG=remote_host=phpstorm
+    - DB_URI=mongodb://node0.mongodb.local:27017,node1.mongodb.local:27017,node2.mongodb.local:27017
+    - DB_REPLICA_SET=cluster
+    - DB_NAME=event_store_tests
+    volumes:
+    - .:/app
+
+  mongodb0:
+    build: ./env/docker/mongo
+    command: ['mongod', '--config', '/etc/mongod.conf']
+    ports:
+    - "27017:27017"
+    hostname: node0.mongodb.local
+    networks:
+      default:
+        aliases:
+        - node0.mongodb.local
+
+  mongodb1:
+    build: ./env/docker/mongo
+    command: ['mongod', '--config', '/etc/mongod.conf']
+    ports:
+    - "27018:27017"
+    hostname: node1.mongodb.local
+    networks:
+      default:
+        aliases:
+        - node1.mongodb.local
+
+  mongodb2:
+    build: ./env/docker/mongo
+    command: ['mongod', '--config', '/etc/mongod.conf']
+    ports:
+    - "27019:27017"
+    hostname: node2.mongodb.local
+    networks:
+      default:
+        aliases:
+        - node2.mongodb.local
+
