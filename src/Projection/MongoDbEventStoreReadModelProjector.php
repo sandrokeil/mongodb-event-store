@@ -19,6 +19,7 @@ use Iterator;
 use MongoDB\Client;
 use MongoDB\Driver\Exception\Exception as MongoDbException;
 use Prooph\Common\Messaging\Message;
+use Prooph\Common\Messaging\MessageFactory;
 use Prooph\EventStore\EventStore;
 use Prooph\EventStore\EventStoreDecorator;
 use Prooph\EventStore\Exception;
@@ -27,6 +28,7 @@ use Prooph\EventStore\MongoDb\Exception\ProjectionNotCreatedException;
 use Prooph\EventStore\MongoDb\Exception\RuntimeException;
 use Prooph\EventStore\MongoDb\MongoDbHelper;
 use Prooph\EventStore\MongoDb\MongoEventStore;
+use Prooph\EventStore\MongoDb\PersistenceStrategy;
 use Prooph\EventStore\Projection\ProjectionStatus;
 use Prooph\EventStore\Projection\ReadModel;
 use Prooph\EventStore\Projection\ReadModelProjector;
@@ -35,6 +37,7 @@ use Prooph\EventStore\StreamName;
 final class MongoDbEventStoreReadModelProjector implements ReadModelProjector
 {
     use MongoDbHelper;
+    use ProcessEvents;
 
     /**
      * @var EventStore
@@ -151,9 +154,21 @@ final class MongoDbEventStoreReadModelProjector implements ReadModelProjector
      */
     private $lastLockUpdate;
 
+    /**
+     * @var MessageFactory
+     */
+    private $messageFactory;
+
+    /**
+     * @var PersistenceStrategy
+     */
+    private $persistenceStrategy;
+
     public function __construct(
         EventStore $eventStore,
         Client $client,
+        PersistenceStrategy $persistenceStrategy,
+        MessageFactory $messageFactory,
         string $database,
         string $name,
         ReadModel $readModel,
@@ -171,6 +186,8 @@ final class MongoDbEventStoreReadModelProjector implements ReadModelProjector
 
         $this->eventStore = $eventStore;
         $this->client = $client;
+        $this->persistenceStrategy = $persistenceStrategy;
+        $this->messageFactory = $messageFactory;
         $this->database = $database;
         $this->name = $name;
         $this->readModel = $readModel;
@@ -455,58 +472,7 @@ final class MongoDbEventStoreReadModelProjector implements ReadModelProjector
         $this->isStopped = false;
 
         try {
-            do {
-                foreach ($this->streamPositions as $streamName => $position) {
-                    try {
-                        $streamEvents = $this->eventStore->load(new StreamName($streamName), $position + 1);
-                    } catch (Exception\StreamNotFound $e) {
-                        // ignore
-                        continue;
-                    }
-
-                    if ($singleHandler) {
-                        $this->handleStreamWithSingleHandler($streamName, $streamEvents);
-                    } else {
-                        $this->handleStreamWithHandlers($streamName, $streamEvents);
-                    }
-
-                    if ($this->isStopped) {
-                        break;
-                    }
-                }
-
-                if (0 === $this->eventCounter) {
-                    \usleep($this->sleep);
-                    $this->updateLock();
-                } else {
-                    $this->persist();
-                }
-
-                $this->eventCounter = 0;
-
-                if ($this->triggerPcntlSignalDispatch) {
-                    \pcntl_signal_dispatch();
-                }
-
-                switch ($this->fetchRemoteStatus()) {
-                    case ProjectionStatus::STOPPING():
-                        $this->stop();
-                        break;
-                    case ProjectionStatus::DELETING():
-                        $this->delete(false);
-                        break;
-                    case ProjectionStatus::DELETING_INCL_EMITTED_EVENTS():
-                        $this->delete(true);
-                        break;
-                    case ProjectionStatus::RESETTING():
-                        $this->reset();
-                        break;
-                    default:
-                        break;
-                }
-
-                $this->prepareStreamPositions();
-            } while ($keepRunning && ! $this->isStopped);
+            $this->processEvents($keepRunning, $singleHandler);
         } finally {
             $this->releaseLock();
         }

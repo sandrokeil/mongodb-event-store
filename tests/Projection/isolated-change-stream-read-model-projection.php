@@ -15,13 +15,41 @@ use Prooph\Common\Messaging\NoOpMessageConverter;
 use Prooph\EventStore\MongoDb\MongoDbEventStore;
 use Prooph\EventStore\MongoDb\PersistenceStrategy\MongoDbSimpleStreamStrategy;
 use Prooph\EventStore\MongoDb\Projection\MongoDbProjectionManager;
-use Prooph\EventStore\Projection\Query;
+use Prooph\EventStore\Projection\ReadModel;
+use Prooph\EventStore\Projection\ReadModelProjector;
 use Prooph\EventStore\Stream;
 use Prooph\EventStore\StreamName;
 use ProophTest\EventStore\Mock\TestDomainEvent;
 use ProophTest\EventStore\MongoDb\TestUtil;
 
 require __DIR__ . '/../../vendor/autoload.php';
+
+$readModel = new class() implements ReadModel {
+    public function init(): void
+    {
+    }
+
+    public function isInitialized(): bool
+    {
+        return true;
+    }
+
+    public function reset(): void
+    {
+    }
+
+    public function delete(): void
+    {
+    }
+
+    public function stack(string $operation, ...$args): void
+    {
+    }
+
+    public function persist(): void
+    {
+    }
+};
 
 $client = TestUtil::getClient();
 $database = TestUtil::getDatabaseName();
@@ -36,8 +64,8 @@ $eventStore = new MongoDbEventStore(
 );
 $events = [];
 
-for ($i = 0; $i < 100; $i++) {
-    $events[] = TestDomainEvent::with(['test' => 1], $i);
+for ($i = 1; $i < 21; $i++) {
+    $events[] = TestDomainEvent::with(['test' => $i], $i);
 }
 
 $eventStore->create(new Stream(new StreamName('user-123'), new ArrayIterator($events)));
@@ -50,20 +78,27 @@ $projectionManager = new MongoDbProjectionManager(
     $database
 );
 
-$query = $projectionManager->createQuery(
+$projection = $projectionManager->createReadModelProjection(
+    'test_projection',
+    $readModel,
     [
-        Query::OPTION_PCNTL_DISPATCH => true,
+        ReadModelProjector::OPTION_PCNTL_DISPATCH => true,
+        ReadModelProjector::OPTION_PERSIST_BLOCK_SIZE => 2,
     ]
 );
-
-\pcntl_signal(SIGQUIT, function () use ($query) {
-    $query->stop();
+\pcntl_signal(SIGQUIT, function () use ($projection) {
+    $projection->stop();
     exit(SIGUSR1);
 });
-
-$query
-    ->fromStreams('user-123')
-    ->whenAny(function () {
-        \usleep(500000);
+$projection
+    ->init(function (): array {
+        return ['aggregate_versions' => []];
     })
-    ->run();
+    ->fromStream('user-123')
+    ->whenAny(function (array $state, \Prooph\Common\Messaging\Message $event) {
+        \usleep(100000);
+        $state['aggregate_versions'][] = $event->metadata()['_aggregate_version'];
+
+        return $state;
+    })
+    ->run(false);

@@ -59,7 +59,13 @@ abstract class AbstractMongoDbEventStoreProjectorTest extends AbstractEventStore
             $this->database,
             $this->getPersistenceStrategy()
         );
-        $this->projectionManager = new MongoDbProjectionManager($this->eventStore, $this->client, $this->database);
+        $this->projectionManager = new MongoDbProjectionManager(
+            $this->eventStore,
+            $this->client,
+            $this->getPersistenceStrategy(),
+            new FQCNMessageFactory(),
+            $this->database
+        );
     }
 
     protected function tearDown(): void
@@ -208,6 +214,8 @@ abstract class AbstractMongoDbEventStoreProjectorTest extends AbstractEventStore
         new MongoDbEventStoreProjector(
             $wrappedEventStore->reveal(),
             $this->client,
+            $this->getPersistenceStrategy(),
+            new FQCNMessageFactory(),
             $this->database,
             'test_projection',
             'event_streams',
@@ -233,6 +241,8 @@ abstract class AbstractMongoDbEventStoreProjectorTest extends AbstractEventStore
         new MongoDbEventStoreProjector(
             $eventStore->reveal(),
             $client->reveal(),
+            $this->getPersistenceStrategy(),
+            new FQCNMessageFactory(),
             $this->database,
             'test_projection',
             'event_streams',

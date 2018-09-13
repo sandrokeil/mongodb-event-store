@@ -70,7 +70,13 @@ class MongoDbProjectionManagerTest extends AbstractProjectionManagerTest
             $this->database,
             $persistenceStrategy
         );
-        $this->projectionManager = new MongoDbProjectionManager($this->eventStore, $this->client, $this->database);
+        $this->projectionManager = new MongoDbProjectionManager(
+            $this->eventStore,
+            $this->client,
+            $persistenceStrategy,
+            new FQCNMessageFactory(),
+            $this->database
+        );
     }
 
     protected function tearDown(): void
@@ -100,8 +106,15 @@ class MongoDbProjectionManagerTest extends AbstractProjectionManagerTest
         $eventStore = $this->prophesize(EventStore::class);
         $wrappedEventStore = $this->prophesize(EventStoreDecorator::class);
         $wrappedEventStore->getInnerEventStore()->willReturn($eventStore->reveal())->shouldBeCalled();
+        $persistenceStrategy = $this->prophesize(PersistenceStrategy::class)->reveal();
 
-        new MongoDbProjectionManager($wrappedEventStore->reveal(), $this->client, TestUtil::getDatabaseName());
+        new MongoDbProjectionManager(
+            $wrappedEventStore->reveal(),
+            $this->client,
+            $persistenceStrategy,
+            new FQCNMessageFactory(),
+            TestUtil::getDatabaseName()
+        );
     }
 
     /**

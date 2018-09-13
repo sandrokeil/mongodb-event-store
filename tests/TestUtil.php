@@ -32,7 +32,8 @@ abstract class TestUtil
                 try {
                     self::$client = new Client(
                         $clientParams['uri'],
-                        $clientParams['uriOptions']
+                        $clientParams['uriOptions'],
+                        ['typeMap' => ['root' => 'array', 'document' => 'array', 'array' => 'array']]
                     );
                 } catch (RuntimeException $e) {
                     $retries--;

@@ -54,17 +54,18 @@ $readModel = new class() implements ReadModel {
 $client = TestUtil::getClient();
 $database = TestUtil::getDatabaseName();
 
+$persistenceStrategy = new MongoDbSimpleStreamStrategy(new NoOpMessageConverter());
+
 $eventStore = new MongoDbEventStore(
     new FQCNMessageFactory(),
     $client,
     $database,
-    new MongoDbSimpleStreamStrategy(new NoOpMessageConverter())
+    $persistenceStrategy
 );
 $events = [];
 
 for ($i = 0; $i < 100; $i++) {
     $events[] = TestDomainEvent::with(['test' => 1], $i);
-    $i++;
 }
 
 $eventStore->create(new Stream(new StreamName('user-123'), new ArrayIterator($events)));
@@ -72,6 +73,8 @@ $eventStore->create(new Stream(new StreamName('user-123'), new ArrayIterator($ev
 $projectionManager = new MongoDbProjectionManager(
     $eventStore,
     $client,
+    $persistenceStrategy,
+    new FQCNMessageFactory(),
     $database
 );
 

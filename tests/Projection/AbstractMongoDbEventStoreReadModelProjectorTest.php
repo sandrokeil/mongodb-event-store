@@ -74,7 +74,13 @@ abstract class AbstractMongoDbEventStoreReadModelProjectorTest extends AbstractE
             $this->database,
             $this->getPersistenceStrategy()
         );
-        $this->projectionManager = new MongoDbProjectionManager($this->eventStore, $this->client, $this->database);
+        $this->projectionManager = new MongoDbProjectionManager(
+            $this->eventStore,
+            $this->client,
+            $this->getPersistenceStrategy(),
+            new FQCNMessageFactory(),
+            $this->database
+        );
     }
 
     /**
@@ -236,6 +242,8 @@ abstract class AbstractMongoDbEventStoreReadModelProjectorTest extends AbstractE
         new MongoDbEventStoreReadModelProjector(
             $wrappedEventStore->reveal(),
             $this->client,
+            $this->getPersistenceStrategy(),
+            new FQCNMessageFactory(),
             $this->database,
             'test_projection',
             new ReadModelMock(),
@@ -262,6 +270,8 @@ abstract class AbstractMongoDbEventStoreReadModelProjectorTest extends AbstractE
         new MongoDbEventStoreReadModelProjector(
             $eventStore->reveal(),
             $client->reveal(),
+            $this->getPersistenceStrategy(),
+            new FQCNMessageFactory(),
             $this->database,
             'test_projection',
             $readModel->reveal(),

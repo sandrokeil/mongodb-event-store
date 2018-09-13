@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ProophTest\EventStore\MongoDb\Container;
 
 use PHPUnit\Framework\TestCase;
+use Prooph\Common\Messaging\FQCNMessageFactory;
 use Prooph\Common\Messaging\MessageFactory;
 use Prooph\EventStore\EventStore;
 use Prooph\EventStore\MongoDb\Container\MongoDbProjectionManagerFactory;
@@ -36,6 +37,7 @@ class MongoDbProjectionManagerFactoryTest extends TestCase
         $config['prooph']['projection_manager']['default'] = [
             'client' => 'my client',
             'database' => 'test_db',
+            'persistence_strategy' => PersistenceStrategy\MongoDbAggregateStreamStrategy::class,
         ];
 
         $client = TestUtil::getClient();
@@ -51,6 +53,8 @@ class MongoDbProjectionManagerFactoryTest extends TestCase
         $container->get('my client')->willReturn($client)->shouldBeCalled();
         $container->get(EventStore::class)->willReturn($eventStore)->shouldBeCalled();
         $container->get('config')->willReturn($config)->shouldBeCalled();
+        $container->get(FQCNMessageFactory::class)->willReturn(new FQCNMessageFactory())->shouldBeCalled();
+        $container->get(PersistenceStrategy\MongoDbAggregateStreamStrategy::class)->willReturn($this->prophesize(PersistenceStrategy::class))->shouldBeCalled();
 
         $factory = new MongoDbProjectionManagerFactory();
         $projectionManager = $factory($container->reveal());
@@ -66,6 +70,7 @@ class MongoDbProjectionManagerFactoryTest extends TestCase
         $config['prooph']['projection_manager']['default'] = [
             'client' => 'my client',
             'database' => 'test_db',
+            'persistence_strategy' => PersistenceStrategy\MongoDbAggregateStreamStrategy::class,
         ];
 
         $client = TestUtil::getClient();
@@ -81,6 +86,8 @@ class MongoDbProjectionManagerFactoryTest extends TestCase
         $container->get('my client')->willReturn($client)->shouldBeCalled();
         $container->get(EventStore::class)->willReturn($eventStore)->shouldBeCalled();
         $container->get('config')->willReturn($config)->shouldBeCalled();
+        $container->get(FQCNMessageFactory::class)->willReturn(new FQCNMessageFactory())->shouldBeCalled();
+        $container->get(PersistenceStrategy\MongoDbAggregateStreamStrategy::class)->willReturn($this->prophesize(PersistenceStrategy::class))->shouldBeCalled();
 
         $name = 'default';
         $pdo = MongoDbProjectionManagerFactory::$name($container->reveal());

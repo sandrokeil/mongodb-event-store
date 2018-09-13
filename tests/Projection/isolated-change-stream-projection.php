@@ -14,11 +14,9 @@ use Prooph\Common\Messaging\FQCNMessageFactory;
 use Prooph\Common\Messaging\NoOpMessageConverter;
 use Prooph\EventStore\MongoDb\MongoDbEventStore;
 use Prooph\EventStore\MongoDb\PersistenceStrategy\MongoDbSimpleStreamStrategy;
+use Prooph\EventStore\MongoDb\Projection\MongoDbEventStoreProjector;
 use Prooph\EventStore\MongoDb\Projection\MongoDbProjectionManager;
-use Prooph\EventStore\Projection\Query;
-use Prooph\EventStore\Stream;
-use Prooph\EventStore\StreamName;
-use ProophTest\EventStore\Mock\TestDomainEvent;
+use ProophTest\EventStore\Mock\UserCreated;
 use ProophTest\EventStore\MongoDb\TestUtil;
 
 require __DIR__ . '/../../vendor/autoload.php';
@@ -34,13 +32,6 @@ $eventStore = new MongoDbEventStore(
     $database,
     $persistenceStrategy
 );
-$events = [];
-
-for ($i = 0; $i < 100; $i++) {
-    $events[] = TestDomainEvent::with(['test' => 1], $i);
-}
-
-$eventStore->create(new Stream(new StreamName('user-123'), new ArrayIterator($events)));
 
 $projectionManager = new MongoDbProjectionManager(
     $eventStore,
@@ -49,21 +40,28 @@ $projectionManager = new MongoDbProjectionManager(
     new FQCNMessageFactory(),
     $database
 );
-
-$query = $projectionManager->createQuery(
+$projection = $projectionManager->createProjection(
+    'test_projection',
     [
-        Query::OPTION_PCNTL_DISPATCH => true,
+        MongoDbEventStoreProjector::OPTION_PCNTL_DISPATCH => true,
+        MongoDbEventStoreProjector::OPTION_PERSIST_BLOCK_SIZE => 2,
     ]
 );
-
-\pcntl_signal(SIGQUIT, function () use ($query) {
-    $query->stop();
+\pcntl_signal(SIGQUIT, function () use ($projection) {
+    $projection->stop();
     exit(SIGUSR1);
 });
-
-$query
-    ->fromStreams('user-123')
-    ->whenAny(function () {
-        \usleep(500000);
+$projection
+    ->init(function (): array {
+        return ['aggregate_versions' => []];
     })
-    ->run();
+    ->fromStream('user-123')
+    ->when([
+        UserCreated::class => function (array $state, UserCreated $event): array {
+            \usleep(100000);
+            $state['aggregate_versions'][] = $event->payload()['id'];
+
+            return $state;
+        },
+    ])
+    ->run(false);

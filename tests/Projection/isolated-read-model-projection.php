@@ -52,16 +52,20 @@ $readModel = new class() implements ReadModel {
 $client = TestUtil::getClient();
 $database = TestUtil::getDatabaseName();
 
+$persistenceStrategy = new MongoDbSimpleStreamStrategy(new NoOpMessageConverter());
+
 $eventStore = new MongoDbEventStore(
     new FQCNMessageFactory(),
     $client,
     $database,
-    new MongoDbSimpleStreamStrategy(new NoOpMessageConverter())
+    $persistenceStrategy
 );
 
 $projectionManager = new MongoDbProjectionManager(
     $eventStore,
     $client,
+    $persistenceStrategy,
+    new FQCNMessageFactory(),
     $database
 );
 $projection = $projectionManager->createReadModelProjection(

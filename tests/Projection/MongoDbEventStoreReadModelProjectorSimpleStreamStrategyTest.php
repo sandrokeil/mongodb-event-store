@@ -13,16 +13,15 @@ declare(strict_types=1);
 namespace ProophTest\EventStore\MongoDb\Projection;
 
 use Prooph\EventStore\MongoDb\PersistenceStrategy;
-use Prooph\EventStore\Stream;
 use Prooph\EventStore\StreamName;
-use ProophTest\EventStore\Mock\UserCreated;
+use ProophTest\EventStore\Mock\TestDomainEvent;
 
 /**
- * @group Projector
+ * @group ReadModel
  * @group Projection
- * @group SimpleStream
+ * @group SinpleStream
  */
-class MongoDbEventStoreProjectorSimpleStreamStrategyTest extends AbstractMongoDbEventStoreProjectorTest
+class MongoDbEventStoreReadModelProjectorSimpleStreamStrategyTest extends AbstractMongoDbEventStoreReadModelProjectorTest
 {
     protected function getPersistenceStrategy(): PersistenceStrategy
     {
@@ -40,18 +39,7 @@ class MongoDbEventStoreProjectorSimpleStreamStrategyTest extends AbstractMongoDb
             return;
         }
 
-        $events = [];
-
-        for ($i = 1; $i < 21; $i++) {
-            $events[] = UserCreated::with([
-                'id' => $i,
-                'time' => \microtime(true),
-            ], 1);
-        }
-
-        $this->eventStore->create(new Stream(new StreamName('user-123'), new \ArrayIterator($events)));
-
-        $command = 'exec php ' . \realpath(__DIR__) . '/isolated-change-stream-projection.php';
+        $command = 'exec php ' . \realpath(__DIR__) . '/isolated-change-stream-read-model-projection.php';
         $descriptorSpec = [
             0 => ['pipe', 'r'],
             1 => ['pipe', 'w'],
@@ -68,23 +56,15 @@ class MongoDbEventStoreProjectorSimpleStreamStrategyTest extends AbstractMongoDb
             \usleep(1000000);
             $result = $this->client->selectCollection($this->database, 'projections')->findOne();
         }
+
         $this->assertTrue($result['position']['user-123'] < 10);
 
         $this->eventStore->appendTo(
             new StreamName('user-123'),
             new \ArrayIterator([
-                UserCreated::with([
-                    'id' => 21,
-                    'time' => \microtime(true),
-                ], 1),
-                UserCreated::with([
-                    'id' => 22,
-                    'time' => \microtime(true),
-                ], 1),
-                UserCreated::with([
-                    'id' => 23,
-                    'time' => \microtime(true),
-                ], 1),
+                TestDomainEvent::with(['test' => 21], 21),
+                TestDomainEvent::with(['test' => 22], 22),
+                TestDomainEvent::with(['test' => 23], 23),
             ])
         );
         $result = $this->client->selectCollection($this->database, 'projections')->findOne();

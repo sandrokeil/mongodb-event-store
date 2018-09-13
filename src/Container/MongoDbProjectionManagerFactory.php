@@ -16,6 +16,7 @@ use Interop\Config\ConfigurationTrait;
 use Interop\Config\ProvidesDefaultOptions;
 use Interop\Config\RequiresConfigId;
 use Interop\Config\RequiresMandatoryOptions;
+use Prooph\Common\Messaging\FQCNMessageFactory;
 use Prooph\EventStore\EventStore;
 use Prooph\EventStore\MongoDb\Exception\InvalidArgumentException;
 use Prooph\EventStore\MongoDb\Projection\MongoDbProjectionManager;
@@ -70,6 +71,8 @@ class MongoDbProjectionManagerFactory implements
         return new MongoDbProjectionManager(
             $container->get($config['event_store']),
             $container->get($config['client']),
+            $container->get($config['persistence_strategy']),
+            $container->get($config['message_factory']),
             $config['database'],
             $config['event_streams_table'],
             $config['projections_table']
@@ -83,7 +86,7 @@ class MongoDbProjectionManagerFactory implements
 
     public function mandatoryOptions(): iterable
     {
-        return ['client', 'database'];
+        return ['client', 'database', 'persistence_strategy'];
     }
 
     public function defaultOptions(): iterable
@@ -92,6 +95,7 @@ class MongoDbProjectionManagerFactory implements
             'event_store' => EventStore::class,
             'event_streams_table' => 'event_streams',
             'projections_table' => 'projections',
+            'message_factory' => FQCNMessageFactory::class,
         ];
     }
 }

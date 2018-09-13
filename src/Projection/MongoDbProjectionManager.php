@@ -14,6 +14,7 @@ namespace Prooph\EventStore\MongoDb\Projection;
 
 use MongoDB\Client;
 use MongoDB\Driver\Exception\Exception as MongoDbException;
+use Prooph\Common\Messaging\MessageFactory;
 use Prooph\EventStore\EventStore;
 use Prooph\EventStore\EventStoreDecorator;
 use Prooph\EventStore\Exception\OutOfRangeException;
@@ -21,6 +22,7 @@ use Prooph\EventStore\Exception\ProjectionNotFound;
 use Prooph\EventStore\MongoDb\Exception;
 use Prooph\EventStore\MongoDb\MongoDbHelper;
 use Prooph\EventStore\MongoDb\MongoEventStore;
+use Prooph\EventStore\MongoDb\PersistenceStrategy;
 use Prooph\EventStore\Projection\ProjectionManager;
 use Prooph\EventStore\Projection\ProjectionStatus;
 use Prooph\EventStore\Projection\Projector;
@@ -57,15 +59,29 @@ final class MongoDbProjectionManager implements ProjectionManager
      */
     private $projectionsTable;
 
+    /**
+     * @var MessageFactory
+     */
+    private $messageFactory;
+
+    /**
+     * @var PersistenceStrategy
+     */
+    private $persistenceStrategy;
+
     public function __construct(
         EventStore $eventStore,
         Client $client,
+        PersistenceStrategy $persistenceStrategy,
+        MessageFactory $messageFactory,
         string $database,
         string $eventStreamsTable = 'event_streams',
         string $projectionsTable = 'projections'
     ) {
         $this->eventStore = $eventStore;
         $this->client = $client;
+        $this->persistenceStrategy = $persistenceStrategy;
+        $this->messageFactory = $messageFactory;
         $this->database = $database;
         $this->eventStreamsTable = $eventStreamsTable;
         $this->projectionsTable = $projectionsTable;
@@ -97,6 +113,8 @@ final class MongoDbProjectionManager implements ProjectionManager
         return new MongoDbEventStoreProjector(
             $this->eventStore,
             $this->client,
+            $this->persistenceStrategy,
+            $this->messageFactory,
             $this->database,
             $name,
             $this->eventStreamsTable,
@@ -118,6 +136,8 @@ final class MongoDbProjectionManager implements ProjectionManager
         return new MongoDbEventStoreReadModelProjector(
             $this->eventStore,
             $this->client,
+            $this->persistenceStrategy,
+            $this->messageFactory,
             $this->database,
             $name,
             $readModel,

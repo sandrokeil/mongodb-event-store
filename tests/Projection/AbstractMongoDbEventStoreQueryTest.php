@@ -64,7 +64,13 @@ abstract class AbstractMongoDbEventStoreQueryTest extends AbstractEventStoreQuer
             $this->database,
             $this->getPersistenceStrategy()
         );
-        $this->projectionManager = new MongoDbProjectionManager($this->eventStore, $this->client, $this->database);
+        $this->projectionManager = new MongoDbProjectionManager(
+            $this->eventStore,
+            $this->client,
+            $this->getPersistenceStrategy(),
+            new FQCNMessageFactory(),
+            $this->database
+        );
     }
 
     protected function tearDown(): void
