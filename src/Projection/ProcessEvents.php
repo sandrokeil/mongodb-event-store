@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Prooph\EventStore\MongoDb\Projection;
 
+use Iterator;
 use Prooph\Common\Messaging\Message;
 use Prooph\EventStore\Exception;
 use Prooph\EventStore\Projection\ProjectionStatus;
@@ -19,6 +20,13 @@ use Prooph\EventStore\StreamName;
 
 trait ProcessEvents
 {
+    /**
+     * Gap history until processed
+     *
+     * @var array
+     */
+    private $gaps = [];
+
     private function processEvents(bool $keepRunning, bool $singleHandler): void
     {
         do {
@@ -29,14 +37,19 @@ trait ProcessEvents
                 $collectionNames[$this->persistenceStrategy->generateCollectionName(new StreamName($streamName))] = $streamName;
             }
             // initialize stream to get new events during processing current events
-            $changeStream = $this->client->selectDatabase($this->database)->watch([
+            $changeStream = $this->client->selectDatabase($this->database)->watch(
                 [
-                    '$match' => [
-                        'ns.coll' => ['$in' => \array_keys($collectionNames)],
-                        'operationType' => 'insert',
+                    [
+                        '$match' => [
+                            'ns.coll' => ['$in' => \array_keys($collectionNames)],
+                            'operationType' => 'insert',
+                        ],
                     ],
                 ],
-            ]);
+                [
+                    'batchSize' => 1000,
+                ]
+            );
 
             foreach ($this->streamPositions as $streamName => $position) {
                 try {
@@ -131,6 +144,7 @@ trait ProcessEvents
                     // event already processed
                     if ($eventTimestamp <= $streamTimestampsStart[$streamName]
                         && $event['fullDocument']['_id'] <= $this->streamPositions[$streamName]
+                        && ! isset($this->gaps[$event['fullDocument']['_id']])
                     ) {
                         $this->updateLock();
                         continue;
@@ -174,6 +188,95 @@ trait ProcessEvents
 
             $this->prepareStreamPositions();
         } while ($keepRunning && ! $this->isStopped);
+    }
+
+    private function addGap(int $from, int $to): void
+    {
+        if ($from >= $to) {
+            return;
+        }
+
+        for ($i = $from; $i < $to; $i++) {
+            $this->gaps[$i] = true;
+        }
+    }
+
+    private function handleStreamWithSingleHandler(string $streamName, Iterator $events): void
+    {
+        $this->currentStreamName = $streamName;
+        $handler = $this->handler;
+
+        foreach ($events as $key => $event) {
+            if ($this->triggerPcntlSignalDispatch) {
+                \pcntl_signal_dispatch();
+            }
+            if ($this->streamPositions[$streamName] + 1 !== $key) {
+                $this->addGap($this->streamPositions[$streamName] + 1, $key);
+            }
+            unset($this->gaps[$key]);
+            // stream position should not be in the past
+            if ($key > $this->streamPositions[$streamName]) {
+                $this->streamPositions[$streamName] = $key;
+            }
+            $this->eventCounter++;
+
+            /* @var Message $event */
+            $result = $handler($this->state, $event);
+
+            if (\is_array($result)) {
+                $this->state = $result;
+            }
+
+            if ($this->eventCounter === $this->persistBlockSize) {
+                $this->persist();
+                $this->eventCounter = 0;
+            }
+
+            if ($this->isStopped) {
+                break;
+            }
+        }
+    }
+
+    private function handleStreamWithHandlers(string $streamName, Iterator $events): void
+    {
+        $this->currentStreamName = $streamName;
+
+        foreach ($events as $key => $event) {
+            if ($this->triggerPcntlSignalDispatch) {
+                \pcntl_signal_dispatch();
+            }
+            if ($this->streamPositions[$streamName] + 1 !== $key) {
+                $this->addGap($this->streamPositions[$streamName] + 1, $key);
+            }
+            unset($this->gaps[$key]);
+            // stream position is in the past
+            if ($key > $this->streamPositions[$streamName]) {
+                $this->streamPositions[$streamName] = $key;
+            }
+            /* @var Message $event */
+            if (! isset($this->handlers[$event->messageName()])) {
+                continue;
+            }
+
+            $this->eventCounter++;
+
+            $handler = $this->handlers[$event->messageName()];
+            $result = $handler($this->state, $event);
+
+            if (\is_array($result)) {
+                $this->state = $result;
+            }
+
+            if ($this->eventCounter === $this->persistBlockSize) {
+                $this->persist();
+                $this->eventCounter = 0;
+            }
+
+            if ($this->isStopped) {
+                break;
+            }
+        }
     }
 
     private function createMessage(array $document): ?Message

@@ -17,7 +17,6 @@ use Closure;
 use DateTimeImmutable;
 use DateTimeZone;
 use EmptyIterator;
-use Iterator;
 use MongoDB\Client;
 use MongoDB\Driver\Exception\Exception as MongoDbException;
 use Prooph\Common\Messaging\Message;
@@ -535,71 +534,6 @@ final class MongoDbEventStoreProjector implements Projector
         }
 
         return ProjectionStatus::byValue($result['status']);
-    }
-
-    private function handleStreamWithSingleHandler(string $streamName, Iterator $events): void
-    {
-        $this->currentStreamName = $streamName;
-        $handler = $this->handler;
-
-        foreach ($events as $key => $event) {
-            if ($this->triggerPcntlSignalDispatch) {
-                \pcntl_signal_dispatch();
-            }
-            /* @var Message $event */
-            $this->streamPositions[$streamName] = $key;
-            $this->eventCounter++;
-
-            $result = $handler($this->state, $event);
-
-            if (\is_array($result)) {
-                $this->state = $result;
-            }
-
-            if ($this->eventCounter === $this->persistBlockSize) {
-                $this->persist();
-                $this->eventCounter = 0;
-            }
-
-            if ($this->isStopped) {
-                break;
-            }
-        }
-    }
-
-    private function handleStreamWithHandlers(string $streamName, Iterator $events): void
-    {
-        $this->currentStreamName = $streamName;
-
-        foreach ($events as $key => $event) {
-            if ($this->triggerPcntlSignalDispatch) {
-                \pcntl_signal_dispatch();
-            }
-            /* @var Message $event */
-            $this->streamPositions[$streamName] = $key;
-
-            if (! isset($this->handlers[$event->messageName()])) {
-                continue;
-            }
-
-            $this->eventCounter++;
-
-            $handler = $this->handlers[$event->messageName()];
-            $result = $handler($this->state, $event);
-
-            if (\is_array($result)) {
-                $this->state = $result;
-            }
-
-            if ($this->eventCounter === $this->persistBlockSize) {
-                $this->persist();
-                $this->eventCounter = 0;
-            }
-
-            if ($this->isStopped) {
-                break;
-            }
-        }
     }
 
     private function createHandlerContext(?string &$streamName)

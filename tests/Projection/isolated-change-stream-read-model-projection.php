@@ -51,6 +51,15 @@ $readModel = new class() implements ReadModel {
     }
 };
 
+$delayedIterator = new class() extends ArrayIterator {
+    public function current()
+    {
+        \usleep(1000);
+
+        return parent::current();
+    }
+};
+
 $client = TestUtil::getClient();
 $database = TestUtil::getDatabaseName();
 
@@ -68,7 +77,7 @@ for ($i = 1; $i < 21; $i++) {
     $events[] = TestDomainEvent::with(['test' => $i], $i);
 }
 
-$eventStore->create(new Stream(new StreamName('user-123'), new ArrayIterator($events)));
+$eventStore->create(new Stream(new StreamName('user-123'), new $delayedIterator($events)));
 
 $projectionManager = new MongoDbProjectionManager(
     $eventStore,
@@ -92,12 +101,12 @@ $projection = $projectionManager->createReadModelProjection(
 });
 $projection
     ->init(function (): array {
-        return ['aggregate_versions' => []];
+        return ['aggregate_positions' => []];
     })
     ->fromStream('user-123')
     ->whenAny(function (array $state, \Prooph\Common\Messaging\Message $event) {
         \usleep(100000);
-        $state['aggregate_versions'][] = $event->metadata()['_aggregate_version'];
+        $state['aggregate_positions'][] = $event->metadata()['_position'];
 
         return $state;
     })

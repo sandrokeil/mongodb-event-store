@@ -90,7 +90,7 @@ class MongoDbEventStoreProjectorSimpleStreamStrategyTest extends AbstractMongoDb
         $result = $this->client->selectCollection($this->database, 'projections')->findOne();
         $this->assertTrue($result['position']['user-123'] < 10);
 
-        \sleep(3);
+        \sleep(2);
         $result = $this->client->selectCollection($this->database, 'projections')->findOne();
         $this->assertSame(23, $result['position']['user-123']);
         $this->assertCount(23, $result['state']['aggregate_versions']);

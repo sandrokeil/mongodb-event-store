@@ -51,33 +51,38 @@ class MongoDbEventStoreReadModelProjectorSimpleStreamStrategyTest extends Abstra
          */
         $projectionProcess = \proc_open($command, $descriptorSpec, $pipes);
 
+        \usleep(100000);
+        $this->eventStore->beginTransaction();
+
+        $this->eventStore->appendTo(
+            new StreamName('user-123'),
+            new \ArrayIterator([
+                TestDomainEvent::with(['test' => 22], 22),
+                TestDomainEvent::with(['test' => 23], 23),
+            ])
+        );
+
         $result = null;
         while ($result === null) {
-            \usleep(1000000);
+            \usleep(500000);
             $result = $this->client->selectCollection($this->database, 'projections')->findOne();
         }
 
         $this->assertTrue($result['position']['user-123'] < 10);
 
-        $this->eventStore->appendTo(
-            new StreamName('user-123'),
-            new \ArrayIterator([
-                TestDomainEvent::with(['test' => 21], 21),
-                TestDomainEvent::with(['test' => 22], 22),
-                TestDomainEvent::with(['test' => 23], 23),
-            ])
-        );
+        $this->eventStore->commit();
+
         $result = $this->client->selectCollection($this->database, 'projections')->findOne();
         $this->assertTrue($result['position']['user-123'] < 10);
 
-        \sleep(3);
+        \sleep(2);
         $result = $this->client->selectCollection($this->database, 'projections')->findOne();
-        $this->assertSame(23, $result['position']['user-123']);
-        $this->assertCount(23, $result['state']['aggregate_versions']);
-        $this->assertSame(20, $result['state']['aggregate_versions'][19]);
-        $this->assertSame(21, $result['state']['aggregate_versions'][20]);
-        $this->assertSame(22, $result['state']['aggregate_versions'][21]);
-        $this->assertSame(23, $result['state']['aggregate_versions'][22]);
+        $this->assertSame(22, $result['position']['user-123']);
+        $this->assertCount(22, $result['state']['aggregate_positions']);
+        $this->assertSame(22, $result['state']['aggregate_positions'][19]);
+        // events from above are saved/processed as last but have first position
+        $this->assertSame(1, $result['state']['aggregate_positions'][20]);
+        $this->assertSame(2, $result['state']['aggregate_positions'][21]);
 
         \sleep(1);
         $processDetails = \proc_get_status($projectionProcess);
