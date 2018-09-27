@@ -24,7 +24,7 @@
         "php": "^7.1",
         "ext-mongodb": "^1.5.2",
         "mongodb/mongodb": "^1.4.2",
-        "prooph/event-store": "^7.3.6"
+        "prooph/event-store": "^7.4.0"
     },
     "require-dev": {
         "sandrokeil/interop-config": "^2.0.1",

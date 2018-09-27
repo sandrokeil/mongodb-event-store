@@ -25,10 +25,12 @@ use Prooph\EventStore\Exception\TransactionNotStarted;
 use Prooph\EventStore\Metadata\FieldType;
 use Prooph\EventStore\Metadata\MetadataMatcher;
 use Prooph\EventStore\Metadata\Operator;
+use Prooph\EventStore\MongoDb\Exception\ConcurrencyExceptionFactory;
 use Prooph\EventStore\MongoDb\Exception\ExtensionNotLoaded;
 use Prooph\EventStore\MongoDb\Exception\RuntimeException;
 use Prooph\EventStore\MongoDb\PersistenceStrategy\MongoDbAggregateStreamStrategy;
 use Prooph\EventStore\Stream;
+use Prooph\EventStore\StreamIterator\EmptyStreamIterator;
 use Prooph\EventStore\StreamName;
 use Prooph\EventStore\TransactionalEventStore;
 use Prooph\EventStore\Util\Assertion;
@@ -240,6 +242,13 @@ final class MongoDbEventStore implements MongoEventStore, TransactionalEventStor
         try {
             $this->collection($tableName)->insertMany($data, $options);
         } catch (MongoDbException $exception) {
+            $code = isset($exception->getWriteResult()->getWriteErrors()[0]) ?
+                $exception->getWriteResult()->getWriteErrors()[0]->getCode()
+                : $exception->getCode();
+
+            if (\in_array($code, [11000, 11001, 12582], true)) {
+                throw ConcurrencyExceptionFactory::fromMongoDbException($exception);
+            }
             throw RuntimeException::fromMongoDbException($exception);
         }
     }
@@ -286,9 +295,16 @@ final class MongoDbEventStore implements MongoEventStore, TransactionalEventStor
                 'session' => $this->session,
             ];
         }
+        $counted = $collection->countDocuments(
+            ['$and' => $where],
+            $options
+        );
 
-        return new MongoDbStreamIterator(
-            function (array $filter = [], array $innerOptions = []) use ($collection, $options, $where) {
+        if (0 === (null === $count ? $counted : \min($counted, $count))) {
+            return new EmptyStreamIterator();
+        }
+        $callable = function (string $method) use ($collection, $options, $where): callable {
+            return function (array $filter = [], array $innerOptions = []) use ($collection, $options, $where, $method) {
                 $innerOptions = \array_replace_recursive(
                     $options,
                     $innerOptions
@@ -299,11 +315,16 @@ final class MongoDbEventStore implements MongoEventStore, TransactionalEventStor
                     }
                 });
 
-                return $collection->find(
+                return $collection->{$method}(
                     ['$and' => $where],
                     $innerOptions
                 );
-            },
+            };
+        };
+
+        return new MongoDbStreamIterator(
+            $callable('find'),
+            $callable('countDocuments'),
             $this->messageFactory,
             $this->loadBatchSize,
             $fromNumber,
@@ -358,8 +379,22 @@ final class MongoDbEventStore implements MongoEventStore, TransactionalEventStor
             ];
         }
 
-        return new MongoDbStreamIterator(
-            function (array $filter = [], array $innerOptions = []) use ($collection, $options, $where) {
+        $counted = $collection->countDocuments(
+            ['$and' => $where],
+            $options
+        );
+
+        if (0 === (null === $count ? $counted : \min($counted, $count))) {
+            return new EmptyStreamIterator();
+        }
+
+        $callable = function (string $method) use ($collection, $options, $where): callable {
+            return function (array $filter = [], array $innerOptions = []) use (
+                $collection,
+                $options,
+                $where,
+                $method
+            ) {
                 $innerOptions = \array_replace_recursive(
                     $options,
                     $innerOptions
@@ -370,11 +405,16 @@ final class MongoDbEventStore implements MongoEventStore, TransactionalEventStor
                     }
                 });
 
-                return $collection->find(
+                return $collection->{$method}(
                     ['$and' => $where],
                     $innerOptions
                 );
-            },
+            };
+        };
+
+        return new MongoDbStreamIterator(
+            $callable('find'),
+            $callable('countDocuments'),
             $this->messageFactory,
             $this->loadBatchSize,
             $fromNumber,

@@ -1,4 +1,4 @@
-FROM mongo:4.0
+FROM mongo:4.0.6
 
 COPY mongod.conf /etc
 COPY init.sh /

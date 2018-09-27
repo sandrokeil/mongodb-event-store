@@ -282,6 +282,10 @@ final class MongoDbProjectionManager implements ProjectionManager
             );
         }
 
+        if (empty($filter) || false === @\preg_match("/$filter/", '')) {
+            throw new Exception\InvalidArgumentException('Invalid regex pattern given');
+        }
+
         try {
             if (! $this->checkCollectionExists($this->projectionsTable)) {
                 throw Exception\CollectionNotSetupException::with($this->projectionsTable);

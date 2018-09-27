@@ -51,7 +51,7 @@ class MongoDbEventStoreReadModelProjectorSimpleStreamStrategyTest extends Abstra
          */
         $projectionProcess = \proc_open($command, $descriptorSpec, $pipes);
 
-        \usleep(100000);
+        \usleep(200000);
         $this->eventStore->beginTransaction();
 
         $this->eventStore->appendTo(
@@ -69,13 +69,12 @@ class MongoDbEventStoreReadModelProjectorSimpleStreamStrategyTest extends Abstra
         }
 
         $this->assertTrue($result['position']['user-123'] < 10);
+        $this->assertTrue($result['position']['user-123'] > 1);
 
+        \usleep(500000);
         $this->eventStore->commit();
 
-        $result = $this->client->selectCollection($this->database, 'projections')->findOne();
-        $this->assertTrue($result['position']['user-123'] < 10);
-
-        \sleep(2);
+        \sleep(3);
         $result = $this->client->selectCollection($this->database, 'projections')->findOne();
         $this->assertSame(22, $result['position']['user-123']);
         $this->assertCount(22, $result['state']['aggregate_positions']);

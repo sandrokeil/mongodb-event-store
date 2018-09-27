@@ -15,19 +15,24 @@ namespace Prooph\EventStore\MongoDb;
 use DateTimeImmutable;
 use DateTimeZone;
 use Generator;
-use Iterator;
 use MongoDB\Driver\Cursor;
 use MongoDB\Exception\Exception as MongoDbException;
 use Prooph\Common\Messaging\Message;
 use Prooph\Common\Messaging\MessageFactory;
 use Prooph\EventStore\MongoDb\Exception\RuntimeException;
+use Prooph\EventStore\StreamIterator\StreamIterator;
 
-final class MongoDbStreamIterator implements Iterator
+final class MongoDbStreamIterator implements StreamIterator
 {
     /**
      * @var callable
      */
     private $query;
+
+    /**
+     * @var callable
+     */
+    private $countQuery;
 
     /**
      * @var MessageFactory
@@ -81,6 +86,7 @@ final class MongoDbStreamIterator implements Iterator
 
     public function __construct(
         callable $query,
+        callable $countQuery,
         MessageFactory $messageFactory,
         int $batchSize,
         int $fromNumber,
@@ -88,6 +94,7 @@ final class MongoDbStreamIterator implements Iterator
         bool $forward
     ) {
         $this->query = $query;
+        $this->countQuery = $countQuery;
         $this->messageFactory = $messageFactory;
         $this->batchSize = $batchSize;
         $this->fromNumber = $fromNumber;
@@ -96,6 +103,22 @@ final class MongoDbStreamIterator implements Iterator
         $this->forward = $forward;
 
         $this->next();
+    }
+
+    public function count()
+    {
+        [$filter, $options] = $this->getFilterAndOptions($this->fromNumber);
+
+        $callable = $this->countQuery;
+        try {
+            $count = (int) $callable($filter, $options);
+
+            return null === $this->count ? $count : \min($count, $this->count);
+        } catch (MongoDbException $exception) {
+            // ignore
+        }
+
+        return 0;
     }
 
     /**
@@ -226,22 +249,9 @@ final class MongoDbStreamIterator implements Iterator
 
     private function buildStatement(int $fromNumber): void
     {
-        if (null === $this->count
-            || $this->count < ($this->batchSize * ($this->batchPosition + 1))
-        ) {
-            $limit = $this->batchSize;
-        } else {
-            $limit = $this->count - ($this->batchSize * $this->batchPosition);
-        }
+        [$filter, $options] = $this->getFilterAndOptions($fromNumber);
 
-        $this->ensureCursor(
-            [
-                '_id' => [$this->forward ? '$gte' : '$lte' => $fromNumber],
-            ],
-            [
-                'limit' => $limit,
-            ]
-        );
+        $this->ensureCursor($filter, $options);
     }
 
     private function yieldCursor(Cursor $cursor): Generator
@@ -249,5 +259,25 @@ final class MongoDbStreamIterator implements Iterator
         foreach ($cursor as $item) {
             yield $item;
         }
+    }
+
+    private function getFilterAndOptions(int $fromNumber): array
+    {
+        if (null === $this->count
+            || $this->count < ($this->batchSize * ($this->batchPosition + 1))
+        ) {
+            $limit = $this->batchSize;
+        } else {
+            $limit = $this->count - ($this->batchSize * ($this->batchPosition + 1));
+        }
+
+        return [
+            [
+                '_id' => [$this->forward ? '$gte' : '$lte' => $fromNumber],
+            ],
+            [
+                'limit' => $limit,
+            ],
+        ];
     }
 }

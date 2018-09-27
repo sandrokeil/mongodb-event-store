@@ -338,7 +338,7 @@ abstract class AbstractMongoDbEventStoreProjectorTest extends AbstractEventStore
 
         \posix_kill($processDetails['pid'], SIGQUIT);
 
-        \sleep(1);
+        \usleep(1500000);
 
         $processDetails = \proc_get_status($projectionProcess);
         $this->assertFalse(

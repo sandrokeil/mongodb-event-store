@@ -365,7 +365,7 @@ abstract class AbstractMongoDbEventStoreReadModelProjectorTest extends AbstractE
 
         \posix_kill($processDetails['pid'], SIGQUIT);
 
-        \sleep(1);
+        \usleep(1500000);
 
         $processDetails = \proc_get_status($projectionProcess);
         $this->assertEquals(
@@ -377,7 +377,7 @@ abstract class AbstractMongoDbEventStoreReadModelProjectorTest extends AbstractE
     /**
      * @test
      */
-    public function it_should_update_lock_if_projection_is_not_locked()
+    public function it_should_update_lock_if_projection_is_not_locked(): void
     {
         $projectorRef = new \ReflectionClass(MongoDbEventStoreReadModelProjector::class);
 
@@ -393,7 +393,7 @@ abstract class AbstractMongoDbEventStoreReadModelProjectorTest extends AbstractE
     /**
      * @test
      */
-    public function it_should_update_lock_if_update_lock_threshold_is_set_to_0()
+    public function it_should_update_lock_if_update_lock_threshold_is_set_to_0(): void
     {
         $projectorRef = new \ReflectionClass(MongoDbEventStoreReadModelProjector::class);
 
@@ -419,7 +419,7 @@ abstract class AbstractMongoDbEventStoreReadModelProjectorTest extends AbstractE
     /**
      * @test
      */
-    public function it_should_update_lock_if_now_is_greater_than_last_lock_update_plus_threshold()
+    public function it_should_update_lock_if_now_is_greater_than_last_lock_update_plus_threshold(): void
     {
         $projectorRef = new \ReflectionClass(MongoDbEventStoreReadModelProjector::class);
 
@@ -445,7 +445,7 @@ abstract class AbstractMongoDbEventStoreReadModelProjectorTest extends AbstractE
     /**
      * @test
      */
-    public function it_should_not_update_lock_if_now_is_lower_than_last_lock_update_plus_threshold()
+    public function it_should_not_update_lock_if_now_is_lower_than_last_lock_update_plus_threshold(): void
     {
         $projectorRef = new \ReflectionClass(MongoDbEventStoreReadModelProjector::class);
 
