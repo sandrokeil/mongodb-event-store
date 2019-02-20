@@ -462,10 +462,30 @@ final class MongoDbEventStore implements MongoEventStore, TransactionalEventStor
             throw new TransactionNotStarted();
         }
 
-        $this->session->commitTransaction();
-        $this->session->endSession();
-        $this->session = null;
-        $this->createdCollections = [];
+        $retries = 0;
+
+        do {
+            $retries++;
+            try {
+                $this->session->commitTransaction();
+
+                $this->session = null;
+                $this->createdCollections = [];
+                break;
+            } catch (\MongoDB\Driver\Exception\CommandException $exception) {
+                $resultDoc = $exception->getResultDocument();
+
+                if (isset($resultDoc->errorLabels)
+                    && in_array('UnknownTransactionCommitResult', $resultDoc->errorLabels, true)
+                ) {
+                    continue;
+                }
+                // we use concurrency exception here, so the message will be dispatched again via ConcurrencyMessageDispatcher
+                throw ConcurrencyExceptionFactory::fromMongoDbException($exception);
+            } catch (\MongoDB\Driver\Exception\Exception $exception) {
+                throw ConcurrencyExceptionFactory::fromMongoDbException($exception);
+            }
+        } while($retries <= 3);
     }
 
     public function rollback(): void
@@ -477,14 +497,18 @@ final class MongoDbEventStore implements MongoEventStore, TransactionalEventStor
         if (null === $this->session) {
             throw new TransactionNotStarted();
         }
-        $this->session->abortTransaction();
-        $this->session->endSession();
+
+        try {
+            $this->session->abortTransaction();
+        } catch (\MongoDB\Driver\Exception\RuntimeException $error) {
+            // it's ok, we can't do anything here
+        } finally {
+            $this->session = null;
+        }
 
         foreach ($this->createdCollections as $collectionName) {
             $this->collection($collectionName)->drop();
         }
-
-        $this->session = null;
         $this->createdCollections = [];
     }
 
@@ -533,6 +557,10 @@ final class MongoDbEventStore implements MongoEventStore, TransactionalEventStor
         int $limit = 20,
         int $offset = 0
     ): array {
+        if (empty($filter) || false === @\preg_match("/$filter/", '')) {
+            throw new Exception\InvalidArgumentException('Invalid regex pattern given');
+        }
+
         $where = $this->createWhereClause($metadataMatcher);
         $where[]['real_stream_name'] = ['$regex' => $filter];
 
@@ -596,6 +624,10 @@ final class MongoDbEventStore implements MongoEventStore, TransactionalEventStor
 
     public function fetchCategoryNamesRegex(string $filter, int $limit = 20, int $offset = 0): array
     {
+        if (empty($filter) || false === @\preg_match("/$filter/", '')) {
+            throw new Exception\InvalidArgumentException('Invalid regex pattern given');
+        }
+
         $where['category'] = ['$regex' => $filter];
 
         try {
